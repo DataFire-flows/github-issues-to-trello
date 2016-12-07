@@ -15,8 +15,8 @@ https://trello.com/1/authorize?expiration=never&scope=read,write,account&respons
 
 Once you're done authorizing, you can run:
 ```
-datafire run flow.js -p.username torvalds -p.repo linux -p.board "Linux Issues"
+datafire run flow.js -p.owner torvalds -p.repo linux -p.board "Linux Issues"
 ```
 
-replacing `p.repo`, `p.username`, and `p.board` with the repository and
+replacing `p.repo`, `p.owner`, and `p.board` with the repository and
 Trello board you want to sync.
