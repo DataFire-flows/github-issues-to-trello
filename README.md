@@ -8,8 +8,10 @@ datafire authenticate trello
 You can find your `key` here:
 https://trello.com/app-key
 
-You'll also need to generate a `token`. The page above
-contains a link for doing so, just below your `key`.
+You can generate a `token` by clicking the link to "Token" on the page above, or by adding your `key` to this URL:
+
+https://trello.com/1/authorize?expiration=never&scope=read,write,account&response_type=token&name=Server%20Token&key=
+
 
 Once you're done authorizing, you can run:
 ```
