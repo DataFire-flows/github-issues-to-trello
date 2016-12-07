@@ -1,0 +1,16 @@
+{
+  "name": "github_to_trello",
+  "version": "1.0.0",
+  "description": "You'll need to authorize Trello by running ``` datafire authenticate trello ```",
+  "main": "flow.js",
+  "dependencies": {
+    "@datafire/github": "0.0.3",
+    "@datafire/trello": "0.0.3"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "MIT"
+}
