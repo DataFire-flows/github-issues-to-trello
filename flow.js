@@ -1,134 +1,107 @@
 const datafire = require('datafire');
-const flow = module.exports = new datafire.Flow("Sync GitHub Issues to Trello", "Create a Trello list for every Milestone, and a card for every Issue");
-const trello = datafire.Integration.new('trello').as('default');
-const github = datafire.Integration.new('github');
+const trello = require('@datafire/trello').actions;
+const github = require('@datafire/github').actions;
 
-flow.step('trello', {
-  do: trello.get("/members/{idMember}/boards"),
-  params: () => {
-    return {idMember: 'me'}
-  }
-})
-
-flow.step('github', {
-  do: github.get("/repos/{owner}/{repo}/issues"),
-  params: (data) => {
-    var pages = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    return pages.map(function(p) {
-      return {
-        owner: flow.params.owner,
-        repo: flow.params.repo,
-        state: 'open',
-        page: p,
-      }
-    })
-  }
-})
-
-flow.step('trello1', {
-  do: trello.get("/boards/{idBoard}/cards"),
-  params: (data) => {
-    var board = data.trello.filter(function(b) {
-      return b.name === flow.params.board || b.id === flow.params.board;
-    })[0];
-    if (!board) throw new Error("Could not find board " + flow.params.board)
-    return {
-      idBoard: board.id,
-      filter: 'open',
-    }
-  }
-})
-
-flow.step('trello2', {
-  do: trello.get("/boards/{idBoard}/lists"),
-  params: (data) => {
-    var board = data.trello.filter(function(b) {
-      return b.name === flow.params.board || b.id === flow.params.board;
-    })[0];
-    return {
-      idBoard: board.id,
-    }
-  }
-})
-
-flow.step('github1', {
-  do: github.get("/repos/{owner}/{repo}/milestones"),
-  params: (data) => {
-    return {
-      owner: flow.params.owner,
-      repo: flow.params.repo,
-    }
-  }
-})
-
-flow.step('trello3', {
-  do: trello.post("/lists"),
-  params: (data) => {
-    var board = data.trello.filter(function(b) {
-      return b.name === flow.params.board || b.id === flow.params.board;
-    })[0];
-    var listsInTrello = data.trello2.map(function(list) {return list.name})
-    var milestones = data.github1;
-    milestones.push({title: 'None'})
-    var newMilestones = milestones.filter(function(m) {
-      return listsInTrello.indexOf('Milestone: ' + m.title) === -1;
-    })
-    return newMilestones.map(function(m) {
-      return {
-        body: {
-          idBoard: board.id,
-          name: 'Milestone: ' + m.title,
+module.exports = new datafire.Action({
+  title: "Sync GitHub Issues to Trello",
+  description: "Create a Trello list for every Milestone, and a card for every Issue",
+  inputs: [{
+    title: 'repo',
+    type: 'string',
+    description: "The GitHub repo to pull issues from",
+  }, {
+    title: 'board',
+    type: 'string',
+    description: "Name or ID of the Trello board to push to",
+  }],
+  handler: (input, context) => {
+    let [owner, repo] = input.repo.split('/');
+    return datafire.flow(context)
+      .then(_ => trello.getMembersBoardsByIdMember({idMember: 'me'}, context))
+      .then(boards => {
+        let board = context.results.boards.filter(board => {
+          return board.name === input.board || board.id == input.board;
+        })[0];
+        if (!board) throw new Error("Board " + input.board + " not found");
+        return board;
+      })
+      .then(board => {
+        let allIssues = [];
+        function getNextPage(issues) {
+          if (issues && !issues.length) return Promise.resolve();
+          allIssues = allIssues.concat(issues || []);
+          let page = 1;
+          return github.repos.owner.repo.issues.get({
+            owner,
+            repo,
+            state: 'open',
+            page: page++,
+          }, context)
         }
-      }
-    });
-  }
-})
-
-flow.step('trello4', {
-  do: trello.post("/cards"),
-  params: (data) => {
-    var board = data.trello.filter(function(b) {
-      return b.name === flow.params.board || b.id === flow.params.board;
-    })[0];
-    var descriptions = data.trello1.map(function(card) {return card.desc})
-    var issues = [];
-    data.github.forEach(function(page) {issues = issues.concat(page)});
-    var newIssues = issues.filter(function(i) {
-      return descriptions.indexOf('GitHub Issue ' + i.number) === -1;
-    })
-    var allLists = data.trello2.concat(data.trello3);
-    return newIssues.map(function(i) {
-      var list = allLists.filter(function(list) {
-        return (list.name === 'Milestone: None' && !i.milestone) || (i.milestone && list.name === 'Milestone: ' + i.milestone.title)
-      })[0]
-      return {
-        body: {
-          idBoard: board.id,
-          idList: list.id,
-          desc: 'GitHub Issue ' + i.number,
-          name: i.title,
-        }
-      }
-    })
-  }
-})
-
-flow.step('trello5', {
-  do: trello.put("/cards/{idCard}/closed"),
-  params: (data) => {
-    var issues = [];
-    data.github.forEach(function(page) {issues = issues.concat(page)});
-    var openIssues = issues.map(function(i) {
-      return 'GitHub Issue ' + i.number;
-    })
-    var closedCards = data.trello1.filter(function(card) {
-      return openIssues.indexOf(card.desc) === -1;
-    })
-    return closedCards.map(function(card) {
-      return {
-        idCard: card.id,
-        body: {value: true},
-      }
-    })
+        return getNextPage();
+      })
+      .then(issues => {
+        return github.repos.owner.repo.milestones.get({
+          owner,
+          repo,
+        }, context);
+      })
+      .then(milestones => {
+        return trello.getBoardsCardsByIdBoard({
+          idBoard: context.results.board.id,
+          filter: 'open',
+        }, context)
+      })
+      .then(cards => {
+        return trello.getBoardsListsByIdBoard({
+          idBoard: context.results.board.id,
+        }, context)
+      })
+      .then(lists => {
+        let listsInTrello = context.results.lists.map(l => l.name);
+        let milestones = context.results.milestones.concat([{title: "None"}]);
+        let newMilestones = milestones.filter(milestone => {
+          return listsInTrello.indexOf("Milestone: " + milestone.title) === -1;
+        })
+        return Promise.all(newMilestones.map(milestone => {
+          return trello.addLists({
+            body: {
+              idBoard: context.results.board.id,
+              name: "Milestone: " + milestone.title,
+            }
+          }, context)
+        }))
+      })
+      .then(createdLists => {
+        let trelloCardBodies = context.results.cards.map(c => c.desc);
+        let newIssues = context.results.issues.filter(i => {
+          return trelloCardBodies.indexOf('GitHub Issue ' + i.number) === -1;
+        });
+        let allLists = context.results.lists.concat(createdLists);
+        return Promise.all(newIssues.map(issue => {
+          var list = allLists.filter(list => {
+            let milestone = issue.milestone || 'None';
+            return list.name === 'Milestone: ' + milestone;
+          })[0];
+          return trello.addCards({
+            body: {
+              idBoard: context.results.board.id,
+              idList: list.id,
+              desc: "GitHub Issue " + issue.number,
+              name: issue.title,
+            }
+          }, context)
+        }))
+      })
+      .then(createdCards => {
+        let openIssueDescriptions = context.results.issues.map(i => "GitHub Issue " + i.number);
+        let closedCards = context.results.cards.filter(card => openIssueDescriptions.indexOf(card.desc) === -1);
+        return Promise.all(closedCards.map(card => {
+          return trello.updateCardsClosedByIdCard({
+            idCard: card.id,
+            body: {value: true},
+          }, context)
+        }))
+      })
   }
 })
