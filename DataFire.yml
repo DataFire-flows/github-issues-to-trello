@@ -1,0 +1,7 @@
+tests:
+  sync_github_to_trello:
+    action: ./sync_github_to_trello.js
+    schedule: rate(1 day)
+    input:
+      repo: OAI/OpenAPI-Specification
+      board: test3
