@@ -4,9 +4,9 @@
   "description": "You'll need to authorize Trello by running ``` datafire authenticate trello ```",
   "main": "flow.js",
   "dependencies": {
-    "@datafire/github": "^2.0.0",
-    "@datafire/trello": "^2.0.0",
-    "datafire": "^2.0.2"
+    "@datafire/github": "^4.0.0",
+    "@datafire/trello": "^3.0.0",
+    "datafire": "^2.17.0"
   },
   "devDependencies": {},
   "scripts": {
